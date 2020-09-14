@@ -54,9 +54,9 @@ public:
 
     s32 get() const;
 
-    void set(s32 state);
-
     void initialize(s32 state);
+
+    void set(s32 state);
 
     void update();
 
@@ -86,7 +86,10 @@ private:
     typedef void (T::*func_type)();
     typedef FuncInitializer<this_type, T, N - 1> FuncInitializerType;
 
-    s32 state_;
+    void initImpl();
+
+    s32 prev_;
+    s32 current_;
     T* parent_;
 
     static FuncInitializerType funcInitializer_;
@@ -109,65 +112,80 @@ typename Mode<T, N>::func_type Mode<T, N>::terms_[N];
 
 template<class T, s32 N>
 Mode<T, N>::Mode(T* parent)
-    : state_(-1)
-    , parent_(parent)
+    : parent_(parent)
 {
     assert(nullptr != parent_);
     FuncInitializerType funcInitializer;
+    initialize(0);
 }
 
 template<class T, s32 N>
 Mode<T, N>::Mode(T* parent, s32 state)
-    : state_(state)
-    , parent_(parent)
+    : parent_(parent)
 {
     assert(0 <= state && state < N);
     assert(nullptr != parent_);
     FuncInitializerType funcInitializer;
-    (parent_->*inits_[state_])();
+    initialize(state);
 }
 
 template<class T, s32 N>
 Mode<T, N>::~Mode()
 {
-    (parent_->*terms_[state_])();
+    if(prev_ != current_){
+        initImpl();
+    }
+    do{
+        if(0<=prev_){
+            s32 prev = prev_;
+            prev_ = current_;
+            (parent_->*terms_[prev])();
+        }
+    }while(prev_ != current_);
+}
+
+template<class T, s32 N>
+s32 Mode<T, N>::get() const
+{
+    return current_;
 }
 
 template<class T, s32 N>
 void Mode<T, N>::initialize(s32 state)
 {
     assert(0 <= state && state < N);
-    state_ = state;
-    (parent_->*inits_[state_])();
-}
-
-template<class T, s32 N>
-void Mode<T, N>::update()
-{
-    assert(0 <= state_ && state_ < N);
-    (parent_->*procs_[state_])();
-}
-
-template<class T, s32 N>
-s32 Mode<T, N>::get() const
-{
-    return state_;
+    prev_ = -1;
+    current_ = state;
 }
 
 template<class T, s32 N>
 void Mode<T, N>::set(s32 state)
 {
     assert(0 <= state && state < N);
+    current_ = state;
+}
 
-    (parent_->*terms_[state_])();
-    state_ = state;
-    for(;;) {
-        s32 prev = state_;
-        (parent_->*inits_[prev])();
-        if(state_ == prev) {
-            break;
-        }
+template<class T, s32 N>
+void Mode<T, N>::update()
+{
+    assert(0 <= current_ && current_ < N);
+    if(prev_ != current_){
+        initImpl();
     }
+    (parent_->*procs_[current_])();
+}
+
+
+template<class T, s32 N>
+void Mode<T, N>::initImpl()
+{
+    do{
+        if(0<=prev_){
+            (parent_->*terms_[prev_])();
+        }
+        prev_ = current_;
+        (parent_->*inits_[current_])();
+    }while(prev_ != current_);
 }
 
 template<class T, s32 N>
@@ -209,7 +227,7 @@ private:
     typedef void (T::*func_type)();
     typedef FuncInitializer<this_type, T, N - 1> FuncInitializerType;
 
-    s32 state_;
+    s32 current_;
     T* parent_;
 
     static func_type procs_[N];
@@ -220,10 +238,10 @@ typename ModeProc<T, N>::func_type ModeProc<T, N>::procs_[N];
 
 template<class T, s32 N>
 ModeProc<T, N>::ModeProc(T* parent, s32 state)
-    : state_(state)
+    : current_(state)
     , parent_(parent)
 {
-    assert(0 <= state_ && state_ < N);
+    assert(0 <= current_ && current_ < N);
     assert(nullptr != parent_);
     FuncInitializerType funcInitializer;
 }
@@ -234,21 +252,21 @@ ModeProc<T, N>::~ModeProc() {}
 template<class T, s32 N>
 void ModeProc<T, N>::update()
 {
-    assert(0 <= state_ && state_ < N);
-    (parent_->*procs_[state_])();
+    assert(0 <= current_ && current_ < N);
+    (parent_->*procs_[current_])();
 }
 
 template<class T, s32 N>
 s32 ModeProc<T, N>::get() const
 {
-    return state_;
+    return current_;
 }
 
 template<class T, s32 N>
 void ModeProc<T, N>::set(s32 state)
 {
     assert(0 <= state && state < N);
-    state_ = state;
+    current_ = state;
 }
 } // namespace lutil
 #endif // INC_LUTIL_MODE_H_
